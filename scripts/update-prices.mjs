@@ -79,6 +79,16 @@ for (const [g, locals] of groups) {
   if (cands.length === 1 && locals.length === 1) matchedId[sid + '/' + locals[0]] = cands[0];
   else if (cands.length && cands.length === locals.length) locals.forEach((l, i) => { matchedId[sid + '/' + l] = cands[i]; });
 }
+// Diagnose: einige nicht zugeordnete Karten mit ähnlichen Produktnamen ausgeben
+let shown = 0;
+for (const [g, locals] of groups) {
+  const [sid, n] = g.split('|');
+  if (locals.some(l => matchedId[sid + '/' + l]) || shown >= 25) continue;
+  const exps = [...(setExp[sid] || [])];
+  const sim = prodList.filter(p => exps.includes(p.idExpansion) && norm(p.name).startsWith(n.slice(0, 4))).slice(0, 4).map(p => p.name + ' #' + p.idProduct);
+  console.log(`  offen: ${sid} ${locals.join(',')} „${n}“ Erw. ${exps.join('/') || '–'} → ${sim.join(' | ') || 'kein ähnliches Produkt'}`);
+  shown++;
+}
 console.log(`Produkt-IDs über die Produktliste zugeordnet: ${Object.keys(matchedId).length} von ${Object.keys(match.cards).length}`);
 
 // ---- 3) Preise zusammenstellen ----
