@@ -43,7 +43,7 @@ function route(){
 // ---------- Übersicht ----------
 function renderStats(){
   const pk=D.cards.filter(c=>c[0]>0), tr=D.cards.filter(c=>c[0]===0);
-  const pOwn=D.pokemon.filter(p=>ST.p[p[0]]).length;
+  const pOwn=D.pokemon.filter(p=>owned(p[0])).length;
   const kOwn=pk.filter(c=>cnt(c)>0).length, tOwn=tr.filter(c=>cnt(c)>0).length;
   const total=Object.values(ST.c).reduce((a,b)=>a+b,0);
   const box=(lbl,a,b)=>`<div class="stat"><div class="lbl">${lbl}</div><div class="val">${a.toLocaleString('de-DE')} <span class="muted" style="font-size:15px">von ${b.toLocaleString('de-DE')}</span></div><div class="bar"><i style="width:${b?(a/b*100).toFixed(1):0}%"></i></div></div>`;
@@ -57,21 +57,26 @@ function renderLegend(){
 }
 
 // ---------- Sammlung ----------
-const cardsPerDex={};
+const cardsPerDex={}, cardsByDex={};
+// Pokémon gilt als vorhanden, wenn eine seiner Karten eingetragen ist oder es manuell auf Ja steht.
+// ST.p enthält nur die manuelle Auswahl – so fällt der Status zurück, wenn alle Karten wieder auf 0 stehen.
+const hasCards=d=>(cardsByDex[d]||[]).some(c=>cnt(c)>0);
+const owned=d=>!!ST.p[d]||hasCards(d);
 function renderSammlung(){
   const q=$('#s-q').value.trim().toLowerCase(), st=$('#s-status').value;
   const rows=D.pokemon.filter(p=>{
     if(q&&!(p[1].toLowerCase().includes(q)||String(p[0])===q.replace(/^#?0*/,'')))return false;
-    if(st==='ja'&&!ST.p[p[0]])return false; if(st==='nein'&&ST.p[p[0]])return false; return true});
+    if(st==='ja'&&!owned(p[0]))return false; if(st==='nein'&&owned(p[0]))return false; return true});
   $('#s-count').textContent=rows.length.toLocaleString('de-DE')+' Pokémon';
-  $('#s-table tbody').innerHTML=rows.map(p=>{const d=p[0],on=!!ST.p[d],n=cardsPerDex[d]||0;
+  $('#s-table tbody').innerHTML=rows.map(p=>{const d=p[0],on=owned(d),byCard=hasCards(d),n=cardsPerDex[d]||0;
     return `<tr><td>${String(d).padStart(4,'0')}</td><td><img loading="lazy" alt="" src="${sprite(d)}"></td><td class="name">${esc(p[1])}</td>
-    <td><span class="yn" data-dex="${d}"><button class="${on?'on-ja':''}" data-v="1">Ja</button><button class="${on?'':'on-nein'}" data-v="0">Nein</button></span></td>
+    <td><span class="yn" data-dex="${d}"><button class="${on?'on-ja':''}" data-v="1">Ja</button><button class="${on?'':'on-nein'}" data-v="0">Nein</button></span>${byCard?'<div class="muted" style="font-size:11px">durch Karte</div>':''}</td>
     <td><a href="#karten?dex=${d}">${n} Karte${n===1?'':'n'}</a></td><td><a class="cm" target="_blank" rel="noopener" href="${cmSearch(p[1])}">Cardmarket</a></td></tr>`}).join('');
 }
 $('#s-table').addEventListener('click',e=>{const b=e.target.closest('.yn button');if(!b)return;const d=b.parentNode.dataset.dex;
   if(b.dataset.v==='1')ST.p[d]=1;else delete ST.p[d];save();
-  b.parentNode.children[0].className=b.dataset.v==='1'?'on-ja':'';b.parentNode.children[1].className=b.dataset.v==='1'?'':'on-nein'});
+  if(b.dataset.v==='0'&&hasCards(d))alertMsg('Für dieses Pokémon sind Karten eingetragen – es bleibt vorhanden. Setze die Karten auf 0, um es zu entfernen.');
+  const on=owned(d);b.parentNode.children[0].className=on?'on-ja':'';b.parentNode.children[1].className=on?'':'on-nein'});
 
 // ---------- Karten / Trainer ----------
 let KV={mode:'karten',page:1,dex:null,list:[]};
@@ -105,7 +110,7 @@ function renderCards(){
   $('#k-grid').innerHTML=part.map(c=>{const n=cnt(c),u=imgUrls(c),s=D.sets[c[2]];
     const im=u.length?`<img loading="lazy" alt="${esc(c[1])}" src="${u[0]}" data-alt="${u[1]||''}">`:'Kein Bild verfügbar';
     const title=c[0]?`<a href="#sammlung" data-goto="${c[0]}">${esc(c[1])}</a><span class="kdex">#${String(c[0]).padStart(4,'0')}</span>`:`<span>${esc(c[1])}</span>`;
-    return `<div class="kc${n?' owned':''}" data-id="${esc(cid(c))}">
+    return `<div class="kc${n?' owned':''}" data-id="${esc(cid(c))}" data-dex="${c[0]}">
       <div class="kimg">${im}</div>
       <div class="kname">${title}</div>
       <div class="kmeta"><b>${esc(s[1])}</b> · ${esc(c[4])}<br>${c[9]?esc(c[9])+' · ':''}${esc(c[6])}</div>
@@ -128,7 +133,13 @@ $('#k-grid').addEventListener('click',e=>{
   if(g){e.preventDefault();location.hash='#sammlung';setTimeout(()=>{$('#s-q').value=String(g.dataset.goto);renderSammlung()},0);return}
   const b=e.target.closest('.cnt button');if(!b)return;
   const card=b.closest('.kc'),id=card.dataset.id,n=Math.max(0,Math.min(99,(ST.c[id]||0)+ +b.dataset.d));
-  if(n)ST.c[id]=n;else delete ST.c[id];save();
+  const dex=+card.dataset.dex, before=dex>0&&owned(dex);
+  if(n)ST.c[id]=n;else delete ST.c[id];
+  save();
+  // Sammlung folgt den Karten: erste Karte -> vorhanden, letzte Karte auf 0 -> wieder fehlend (außer manuell Ja)
+  if(dex>0){const after=owned(dex),name=card.querySelector('.kname a,.kname span').textContent;
+    if(!before&&after)alertMsg(name+' ist jetzt in der Sammlung als vorhanden markiert.');
+    if(before&&!after)alertMsg(name+' ist in der Sammlung wieder als fehlend markiert.')}
   b.parentNode.querySelector('span').textContent=n;card.classList.toggle('owned',n>0);
 });
 ['#k-set','#k-rar','#k-type','#k-status'].forEach(s=>$(s).addEventListener('change',()=>{KV.page=1;filterCards()}));
@@ -138,7 +149,7 @@ $('#s-status').addEventListener('change',renderSammlung);
 
 // ---------- Fehlend ----------
 function renderFehlend(){
-  const m=D.pokemon.filter(p=>!ST.p[p[0]]);
+  const m=D.pokemon.filter(p=>!owned(p[0]));
   $('#f-count').textContent=`Noch fehlend: ${m.length.toLocaleString('de-DE')} von ${D.pokemon.length.toLocaleString('de-DE')}`;
   $('#f-list').innerHTML=m.map(p=>`<div><span>${String(p[0]).padStart(4,'0')}</span>${esc(p[1])}</div>`).join('')||'<p>Alle Pokémon vorhanden – Glückwunsch!</p>';
 }
@@ -156,7 +167,7 @@ function alertMsg(t){const d=document.createElement('div');d.textContent=t;d.sty
 load();
 fetch('data/data.json').then(r=>r.json()).then(j=>{
   D=j;$('#loading').remove();$('#stand').textContent=D.stand;
-  D.cards.forEach(c=>{if(c[0])cardsPerDex[c[0]]=(cardsPerDex[c[0]]||0)+1});
+  D.cards.forEach(c=>{if(c[0]){cardsPerDex[c[0]]=(cardsPerDex[c[0]]||0)+1;(cardsByDex[c[0]]=cardsByDex[c[0]]||[]).push(c)}});
   // set filter (newest first)
   const used=new Set(D.cards.map(c=>c[2]));
   $('#k-set').innerHTML+=D.sets.map((s,i)=>used.has(i)?`<option value="${i}">${esc(s[1])} (${s[2].slice(0,4)})</option>`:'').reverse().join('');
