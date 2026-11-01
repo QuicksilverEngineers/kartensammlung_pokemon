@@ -13,6 +13,10 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(ST))}catch(e){}}
 // card helpers: [dex,name,setIdx,local,nr,rarIdx,ausf,cmId,img,trainerType]
 const cid=c=>D.sets[c[2]][0]+'/'+c[3];
 const cnt=c=>ST.c[cid(c)]||0;
+// Cardmarket-Preise (Snapshot): PRICES.p["set/local"] = [Tiefstpreis, Trendpreis]
+let PRICES={stand:'',p:{}};
+const price=c=>PRICES.p[cid(c)]||null;
+const eur=v=>v==null?'–':v.toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 function imgUrls(c){
   if(!c[8])return [];
   const s=D.sets[c[2]],p=`https://assets.tcgdex.net/{l}/${s[3]}/${s[0]}/${encodeURIComponent(c[3])}/low.webp`;
@@ -49,7 +53,17 @@ function renderStats(){
   const total=Object.values(ST.c).reduce((a,b)=>a+b,0);
   const box=(lbl,a,b)=>`<div class="stat"><div class="lbl">${lbl}</div><div class="val">${a.toLocaleString('de-DE')} <span class="muted" style="font-size:15px">von ${b.toLocaleString('de-DE')}</span></div><div class="bar"><i style="width:${b?(a/b*100).toFixed(1):0}%"></i></div></div>`;
   $('#stats').innerHTML=box('Pokémon vorhanden',pOwn,D.pokemon.length)+box('Pokémon-Karten vorhanden',kOwn,pk.length)+box('Trainerkarten vorhanden',tOwn,tr.length)
+    +valueBox()
     +`<div class="stat"><div class="lbl">Karten insgesamt (inkl. Dubletten)</div><div class="val">${total.toLocaleString('de-DE')}</div><div class="muted" style="font-size:13px">Fehlende Pokémon: ${(D.pokemon.length-pOwn).toLocaleString('de-DE')}</div></div>`;
+}
+function valueBox(){
+  let low=0,trend=0,priced=0,unpriced=0;
+  D.cards.forEach(c=>{const n=cnt(c);if(!n)return;const p=price(c);
+    if(p&&(p[0]!=null||p[1]!=null)){low+=n*(p[0]||0);trend+=n*(p[1]!=null?p[1]:(p[0]||0));priced+=n}else unpriced+=n});
+  return `<div class="stat"><div class="lbl">Geschätzter Sammlungswert (Cardmarket)</div>
+    <div class="val">${eur(low)} <span class="muted" style="font-size:15px">Tiefstpreis</span></div>
+    <div style="font-size:14px"><b>${eur(trend)}</b> <span class="muted">Trendpreis</span></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">${priced.toLocaleString('de-DE')} Karten bewertet${unpriced?`, ${unpriced.toLocaleString('de-DE')} ohne Preis`:''}${PRICES.stand?` · Preisstand ${esc(PRICES.stand)}`:''}</div></div>`;
 }
 function renderLegend(){
   const seen=new Set();let h='';
@@ -82,7 +96,7 @@ $('#s-table').addEventListener('click',e=>{const b=e.target.closest('.yn button'
 // ---------- Karten / Trainer ----------
 let KV={mode:'karten',page:1,dex:null,list:[]};
 function openCards(mode,params){
-  if(KV.mode!==mode){$('#k-q').value='';$('#k-set').value='';$('#k-rar').value='';$('#k-type').value='';$('#k-status').value=''}
+  if(KV.mode!==mode){$('#k-q').value='';$('#k-set').value='';$('#k-rar').value='';$('#k-type').value='';$('#k-status').value='';$('#k-sort').value=''}
   KV.mode=mode;KV.page=1;KV.dex=params.get('dex')?+params.get('dex'):null;
   if(KV.dex){const p=D.pokemon.find(x=>x[0]===KV.dex);$('#k-q').value=p?p[1]:''}
   $('#k-type').hidden=mode!=='trainer';
@@ -103,8 +117,14 @@ function filterCards(){
     if(ty&&c[9]!==ty)return false;
     if(st==='ja'&&!cnt(c))return false; if(st==='nein'&&cnt(c))return false;
     return true});
+  const so=$('#k-sort').value;
+  if(so){const v=c=>{const p=price(c);return p?(so.startsWith('trend')?p[1]:p[0]):null};
+    KV.list=KV.list.slice().sort((a,b)=>{const x=v(a),y=v(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return so.endsWith('desc')?y-x:x-y})}
   renderCards();
 }
+function priceLine(c){const p=price(c);
+  if(!p||(p[0]==null&&p[1]==null))return '<div class="kprice muted">Kein Preis</div>';
+  return `<div class="kprice">ab <b>${eur(p[0])}</b> <span class="muted">· Trend ${eur(p[1])}</span></div>`}
 function renderCards(){
   const L=KV.list,pages=Math.max(1,Math.ceil(L.length/PAGE));KV.page=Math.min(KV.page,pages);
   const part=L.slice((KV.page-1)*PAGE,KV.page*PAGE);
@@ -116,6 +136,7 @@ function renderCards(){
       <div class="kimg">${im}</div>
       <div class="kname">${title}</div>
       <div class="kmeta"><b>${esc(s[1])}</b> · ${esc(c[4])}<br>${c[9]?esc(c[9])+' · ':''}${esc(c[6])}</div>
+      ${priceLine(c)}
       <div class="krow">${rarHtml(c[5])}<a class="cm" target="_blank" rel="noopener" href="${cmUrl(c)}">Cardmarket</a></div>
       <div class="krow"><span class="muted" style="font-size:12px">Anzahl</span><span class="cnt"><button data-d="-1" aria-label="weniger">−</button><span>${n}</span><button data-d="1" aria-label="mehr">+</button></span></div>
     </div>`}).join('')||'<p class="muted">Keine Karten gefunden.</p>';
@@ -144,7 +165,7 @@ $('#k-grid').addEventListener('click',e=>{
     if(before&&!after)alertMsg(name+' ist in der Sammlung wieder als fehlend markiert.')}
   b.parentNode.querySelector('span').textContent=n;card.classList.toggle('owned',n>0);
 });
-['#k-set','#k-rar','#k-type','#k-status'].forEach(s=>$(s).addEventListener('change',()=>{KV.page=1;filterCards()}));
+['#k-set','#k-rar','#k-type','#k-status','#k-sort'].forEach(s=>$(s).addEventListener('change',()=>{KV.page=1;filterCards()}));
 let tq;$('#k-q').addEventListener('input',()=>{clearTimeout(tq);tq=setTimeout(()=>{if(KV.dex){KV.dex=null;history.replaceState(null,'','#'+KV.mode)}KV.page=1;filterCards()},200)});
 let ts;$('#s-q').addEventListener('input',()=>{clearTimeout(ts);ts=setTimeout(renderSammlung,150)});
 $('#s-status').addEventListener('change',renderSammlung);
@@ -250,7 +271,8 @@ function alertMsg(t){const d=document.createElement('div');d.textContent=t;d.sty
 
 // ---------- init ----------
 load();
-fetch('data/data.json').then(r=>r.json()).then(j=>{
+const pricesReady=fetch('data/prices.json').then(r=>r.ok?r.json():null).then(p=>{if(p&&p.p)PRICES=p}).catch(()=>{});
+Promise.all([fetch('data/data.json').then(r=>r.json()),pricesReady]).then(([j])=>{
   D=j;$('#loading').remove();$('#stand').textContent=D.stand;
   D.cards.forEach(c=>{if(c[0]){cardsPerDex[c[0]]=(cardsPerDex[c[0]]||0)+1;(cardsByDex[c[0]]=cardsByDex[c[0]]||[]).push(c)}});
   // set filter (newest first)
