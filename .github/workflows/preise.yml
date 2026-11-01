@@ -1,0 +1,31 @@
+name: Cardmarket-Preise aktualisieren
+
+# Einmalige Momentaufnahme: läuft nur, wenn man sie manuell startet
+# (GitHub → Actions → „Cardmarket-Preise aktualisieren“ → Run workflow)
+# oder beim Push dieser Workflow-Datei bzw. des Skripts.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/preise.yml
+      - scripts/update-prices.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  preise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/update-prices.mjs
+      - name: Preise committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/prices.json
+          git diff --cached --quiet || git commit -m "Cardmarket-Preise aktualisiert"
+          git push
