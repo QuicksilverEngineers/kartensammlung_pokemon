@@ -13,7 +13,7 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(ST))}catch(e){}}
 // card helpers: [dex,name,setIdx,local,nr,rarIdx,ausf,cmId,img,trainerType]
 const cid=c=>D.sets[c[2]][0]+'/'+c[3];
 const cnt=c=>ST.c[cid(c)]||0;
-// Cardmarket-Preise (Snapshot): PRICES.p["set/local"] = [Tiefstpreis, Trendpreis]
+// Cardmarket-Preise (Snapshot): PRICES.p["set/local"] = [Tiefstpreis, Trendpreis, idProduct]
 let PRICES={stand:'',p:{}};
 const price=c=>PRICES.p[cid(c)]||null;
 const eur=v=>v==null?'–':v.toLocaleString('de-DE',{style:'currency',currency:'EUR'});
@@ -23,7 +23,8 @@ function imgUrls(c){
   return c[8]===1?[p.replace('{l}','de')]:[p.replace('{l}','de'),p.replace('{l}','en')];
 }
 function cmUrl(c){
-  if(c[7])return 'https://www.cardmarket.com/de/Pokemon/Products?idProduct='+c[7];
+  const id=c[7]||(PRICES.p[cid(c)]||[])[2];
+  if(id)return 'https://www.cardmarket.com/de/Pokemon/Products?idProduct='+id;
   return 'https://www.cardmarket.com/de/Pokemon/Products/Search?category=-1&searchMode=v2&searchString='+encodeURIComponent(c[1]+' '+c[4]+' '+D.sets[c[2]][1]);
 }
 const cmSearch=name=>'https://www.cardmarket.com/de/Pokemon/Products/Search?category=-1&searchMode=v2&searchString='+encodeURIComponent(name);
