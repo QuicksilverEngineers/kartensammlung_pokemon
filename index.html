@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokémon-Kartensammlung</title>
+<meta name="description" content="Meine Pokémon-Kartensammlung: alle 1.025 Pokémon und alle deutschen Pokémon- und Trainerkarten mit Rarität, Bild und Cardmarket-Link.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23fff' stroke='%2317365D' stroke-width='8'/><path d='M4 50h92' stroke='%2317365D' stroke-width='8'/><path d='M4 50a46 46 0 0 1 92 0z' fill='%23d6333a'/><circle cx='50' cy='50' r='14' fill='%23fff' stroke='%2317365D' stroke-width='8'/></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <h1>Meine Pokémon-Kartensammlung</h1>
+    <nav id="tabs">
+      <a href="#uebersicht" data-tab="uebersicht">Übersicht</a>
+      <a href="#sammlung" data-tab="sammlung">Sammlung</a>
+      <a href="#karten" data-tab="karten">Kartenversionen</a>
+      <a href="#trainer" data-tab="trainer">Trainerkarten</a>
+      <a href="#fehlend" data-tab="fehlend">Fehlende Pokémon</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="loading" class="muted">Daten werden geladen …</div>
+
+  <!-- Übersicht -->
+  <section id="view-uebersicht" class="view" hidden>
+    <div class="stats" id="stats"></div>
+    <div class="panel">
+      <h2>So funktioniert es</h2>
+      <ol class="howto">
+        <li>Im Bereich <b>Sammlung</b> bei vorhandenen Pokémon <b>Ja</b> wählen.</li>
+        <li>In <b>Kartenversionen</b> und <b>Trainerkarten</b> mit + und − die Anzahl je Karte eintragen.</li>
+        <li><b>Fehlende Pokémon</b> ausdrucken oder als PDF speichern – zum Beispiel für den Flohmarkt.</li>
+      </ol>
+      <p class="muted">Deine Einträge werden nur in diesem Browser gespeichert. Mit einer Sicherung kannst du sie auf ein anderes Gerät übertragen.</p>
+      <div class="row-btns">
+        <button id="btn-export" class="btn">Sicherung herunterladen</button>
+        <label class="btn">Sicherung laden<input id="file-import" type="file" accept="application/json" hidden></label>
+        <button id="btn-reset" class="btn btn-ghost">Alles zurücksetzen</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Raritätssymbole</h2>
+      <div id="legend" class="legend"></div>
+    </div>
+  </section>
+
+  <!-- Sammlung -->
+  <section id="view-sammlung" class="view" hidden>
+    <div class="toolbar">
+      <input id="s-q" type="search" placeholder="Pokémon oder Nr. suchen …">
+      <select id="s-status"><option value="">Alle</option><option value="ja">Vorhanden</option><option value="nein">Fehlend</option></select>
+      <span id="s-count" class="muted"></span>
+    </div>
+    <div class="table-wrap">
+      <table class="tbl" id="s-table">
+        <thead><tr><th>Nr.</th><th>Bild</th><th>Pokémon</th><th>Besitze ich?</th><th>Karten</th><th>Cardmarket</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Karten / Trainer -->
+  <section id="view-karten" class="view" hidden>
+    <div class="toolbar">
+      <input id="k-q" type="search" placeholder="Name oder Pokédex-Nr. …">
+      <select id="k-set"><option value="">Alle Erweiterungen</option></select>
+      <select id="k-rar"><option value="">Alle Raritäten</option></select>
+      <select id="k-type" hidden><option value="">Alle Trainer-Typen</option></select>
+      <select id="k-status"><option value="">Alle</option><option value="ja">Vorhanden</option><option value="nein">Fehlend</option></select>
+      <span id="k-count" class="muted"></span>
+    </div>
+    <div id="k-grid" class="grid"></div>
+    <div class="pager" id="k-pager"></div>
+  </section>
+
+  <!-- Fehlend -->
+  <section id="view-fehlend" class="view" hidden>
+    <div class="toolbar no-print">
+      <span id="f-count" class="muted"></span>
+      <button class="btn" onclick="window.print()">Drucken / als PDF speichern</button>
+    </div>
+    <h2 class="print-only">Fehlende Pokémon – Flohmarkt-Liste</h2>
+    <div id="f-list" class="missing"></div>
+  </section>
+</main>
+
+<footer class="wrap muted foot">
+  Daten: tcgdex-Kartendatenbank (Namen, Raritäten, Cardmarket-IDs, Bilder), Pokémon-Namen: Pokewiki / PokéAPI. Stand <span id="stand"></span>.
+  Pokémon und alle zugehörigen Namen sind Marken von Nintendo, Creatures und GAME FREAK. Private Sammlerübersicht ohne kommerziellen Zweck.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
