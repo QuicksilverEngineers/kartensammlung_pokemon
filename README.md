@@ -11,3 +11,9 @@ Statische Website – kein Build-Schritt nötig.
 - Einträge (Ja/Nein, Anzahl) werden im Browser gespeichert (localStorage). Über „Sicherung herunterladen/laden“ lassen sie sich auf andere Geräte übertragen.
 - Kartenbilder kommen von assets.tcgdex.net, Pokémon-Bilder von den PokéAPI-Sprites auf GitHub.
 - Lokal testen: `npx serve .` (index.html nicht direkt als Datei öffnen, sonst lädt data.json nicht).
+
+
+## Karten per Foto scannen (Tab „Karten scannen“)
+Kostenlos und ohne Server: Die Texterkennung (Tesseract.js) läuft im Browser, das Foto verlässt das Gerät nicht.
+Beim ersten Scan werden einmalig ca. 10 MB Erkennungsdaten von cdn.jsdelivr.net geladen.
+Modus „1 Karte“ für Einzelkarten, „Ordnerseite“ für bis zu 9 Karten. Die Zuordnung (`scan-match.js`) nutzt Kartenname und Kartennummer.

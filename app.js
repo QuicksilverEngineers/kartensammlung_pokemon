@@ -29,7 +29,7 @@ const rarHtml=i=>{const r=D.rarities[i];return `<span class="sym" style="color:$
 // ---------- routing ----------
 function route(){
   const h=(location.hash||'#uebersicht').slice(1); const [tab,qs]=h.split('?');
-  const t=['uebersicht','sammlung','karten','trainer','fehlend'].includes(tab)?tab:'uebersicht';
+  const t=['uebersicht','sammlung','karten','trainer','fehlend','scan'].includes(tab)?tab:'uebersicht';
   document.querySelectorAll('#tabs a').forEach(a=>a.classList.toggle('active',a.dataset.tab===t));
   document.querySelectorAll('.view').forEach(v=>v.hidden=true);
   const params=new URLSearchParams(qs||'');
@@ -37,6 +37,7 @@ function route(){
   if(t==='sammlung'){$('#view-sammlung').hidden=false;renderSammlung()}
   if(t==='karten'||t==='trainer'){$('#view-karten').hidden=false;openCards(t,params)}
   if(t==='fehlend'){$('#view-fehlend').hidden=false;renderFehlend()}
+  if(t==='scan'){$('#view-scan').hidden=false}
   window.scrollTo(0,0);
 }
 
@@ -91,11 +92,12 @@ function openCards(mode,params){
 function filterCards(){
   const tr=KV.mode==='trainer', q=$('#k-q').value.trim().toLowerCase(), s=$('#k-set').value, r=$('#k-rar').value, ty=$('#k-type').value, st=$('#k-status').value;
   const qn=/^#?\d+$/.test(q)?+q.replace('#',''):null;
+  const qnr=/^\d+\s*\//.test(q)?q.replace(/\s/g,'').replace(/^0+/,''):null;
   const rset=r?new Set(r.split(',').map(Number)):null;
   KV.list=D.cards.filter(c=>{
     if(tr?c[0]!==0:c[0]===0)return false;
     if(KV.dex&&c[0]!==KV.dex)return false;
-    if(q&&!KV.dex){if(qn!==null&&!tr){if(c[0]!==qn)return false}else if(!c[1].toLowerCase().includes(q))return false}
+    if(q&&!KV.dex){if(qnr){if(!c[4].replace(/^0+/,'').startsWith(qnr))return false}else if(qn!==null&&!tr){if(c[0]!==qn)return false}else if(!c[1].toLowerCase().includes(q))return false}
     if(s!==''&&c[2]!==+s)return false;
     if(rset&&!rset.has(c[5]))return false;
     if(ty&&c[9]!==ty)return false;
@@ -153,6 +155,89 @@ function renderFehlend(){
   $('#f-count').textContent=`Noch fehlend: ${m.length.toLocaleString('de-DE')} von ${D.pokemon.length.toLocaleString('de-DE')}`;
   $('#f-list').innerHTML=m.map(p=>`<div><span>${String(p[0]).padStart(4,'0')}</span>${esc(p[1])}</div>`).join('')||'<p>Alle Pokémon vorhanden – Glückwunsch!</p>';
 }
+
+// ---------- Karten scannen (kostenlos, Texterkennung im Browser mit Tesseract.js) ----------
+const TESS_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+let SCAN={file:null,img:null,rot:0,mode:'nine',results:[]},IX=null,worker=null;
+try{SCAN.mode=localStorage.getItem('pkmn-scan-mode')||'nine'}catch(e){}
+const setMode=m=>{SCAN.mode=m;document.querySelectorAll('#scan-mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));try{localStorage.setItem('pkmn-scan-mode',m)}catch(e){}};
+setMode(SCAN.mode);
+$('#scan-mode').addEventListener('click',e=>{const b=e.target.closest('button[data-m]');if(b)setMode(b.dataset.m)});
+function loadScript(src){return new Promise((ok,err)=>{if(window.Tesseract)return ok();const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>err(new Error('Texterkennung konnte nicht geladen werden (Internetverbindung?).'));document.head.appendChild(s)})}
+async function getWorker(){
+  if(worker)return worker;
+  await loadScript(TESS_URL);
+  worker=await Tesseract.createWorker('deu',1,{logger:m=>{if(m.status==='recognizing text')scanStatus(`Text wird gelesen … ${Math.round(m.progress*100)} %`);else if(/load|init/.test(m.status))scanStatus('Texterkennung wird vorbereitet … (beim ersten Mal ca. 10 MB)')}});
+  await worker.setParameters({tessedit_pageseg_mode:'11'});
+  return worker;
+}
+const scanStatus=t=>{$('#scan-status').textContent=t};
+function drawPreview(){
+  if(!SCAN.img){$('#scan-preview').innerHTML='';return}
+  const cv=prepCanvas(SCAN.rot,600,false);cv.style.maxWidth='100%';cv.style.maxHeight='320px';cv.style.borderRadius='8px';
+  $('#scan-preview').innerHTML='';$('#scan-preview').appendChild(cv);
+}
+// Bild drehen, skalieren und in Graustufen umwandeln
+function prepCanvas(rot,target,gray=true){
+  const im=SCAN.img,sw=im.naturalWidth,sh=im.naturalHeight,f=Math.min(3,target/Math.max(sw,sh));
+  const w=Math.round(sw*f),h=Math.round(sh*f),r=((rot%360)+360)%360,cv=document.createElement('canvas');
+  cv.width=r%180?h:w;cv.height=r%180?w:h;const g=cv.getContext('2d');
+  if(gray)g.filter='grayscale(1) contrast(1.2)';
+  g.translate(cv.width/2,cv.height/2);g.rotate(r*Math.PI/180);g.drawImage(im,-w/2,-h/2,w,h);return cv;
+}
+$('#scan-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;SCAN.file=f;SCAN.rot=0;
+  const img=new Image();img.onload=()=>{SCAN.img=img;drawPreview();$('#scan-go').disabled=false;$('#scan-rot').hidden=false};img.src=URL.createObjectURL(f);
+  $('#scan-results').innerHTML='';scanStatus('')});
+$('#scan-rot').addEventListener('click',e=>{const b=e.target.closest('button[data-r]');if(!b)return;SCAN.rot=(SCAN.rot+ +b.dataset.r+360)%360;drawPreview()});
+const quality=r=>r.items.reduce((a,it)=>a+it.score,0);
+$('#scan-go').addEventListener('click',async()=>{
+  $('#scan-go').disabled=true;$('#scan-results').innerHTML='';
+  try{
+    const w=await getWorker();if(!IX)IX=ScanMatch.buildIndex(D);
+    const one=SCAN.mode==='one',target=one?2200:4000,need=one?1:3;
+    // Zuerst wie angezeigt lesen; wenn kaum etwas erkannt wird, automatisch gedreht versuchen
+    let best=null;
+    for(const extra of [0,90,270,180]){
+      const rot=(SCAN.rot+extra)%360;
+      scanStatus(extra?`Wenig erkannt – versuche das Bild um ${extra}° gedreht …`:'Text wird gelesen …');
+      const {data}=await w.recognize(prepCanvas(rot,target));
+      const r=ScanMatch.analyze(data.text,IX,{mode:SCAN.mode});r.rot=rot;
+      if(!best||quality(r)>quality(best))best=r;
+      if(r.items.filter(i=>i.score>=3).length>=need)break;
+    }
+    if(best.rot!==SCAN.rot){SCAN.rot=best.rot;drawPreview()}
+    SCAN.results=best.items;
+    const sure=best.items.filter(i=>i.sicher).length;
+    scanStatus(best.items.length?`${best.items.length} Karte${best.items.length===1?'':'n'} gefunden, ${sure} davon sicher (angehakt). Bitte prüfen und hinzufügen.`:'Keine Karte erkannt. Tipp: näher heran, gerade von oben, ohne Spiegelung – oder den Modus „1 Karte“ nutzen.');
+    renderScan();
+  }catch(e){scanStatus(e.message||String(e))}
+  $('#scan-go').disabled=false;
+});
+function renderScan(){
+  if(!SCAN.results.length){$('#scan-results').innerHTML='';return}
+  $('#scan-results').innerHTML=SCAN.results.map((r,i)=>{
+    const c=D.cards[r.cand[0]],u=imgUrls(c);
+    const opts=r.cand.map(ci=>{const cc=D.cards[ci];return `<option value="${ci}">${esc(cc[1])} · ${esc(D.sets[cc[2]][1])} · ${esc(cc[4])}</option>`}).join('');
+    return `<div class="sr" data-i="${i}">
+      <input type="checkbox" ${r.sicher?'checked':''} aria-label="Hinzufügen">
+      ${u.length?`<img loading="lazy" alt="" src="${u[0]}" data-alt="${u[1]||''}">`:'<div class="ph"></div>'}
+      <div><div><b>${esc(c[1])}</b> <span class="muted">(${cnt(c)}× vorhanden)</span></div>
+        <div class="det">${esc(D.sets[c[2]][1])} · ${esc(c[4])} · erkannt über ${esc(r.how)}${r.sicher?'':' – bitte prüfen'}</div>
+        ${r.cand.length>1?`<select>${opts}</select>`:''}
+      </div></div>`}).join('')+`<div class="scan-actions"><button class="btn" id="scan-add">Ausgewählte hinzufügen (+1)</button><span class="muted">Nur angehakte Karten werden hinzugefügt. Fehlt eine Karte, trage sie in „Kartenversionen“ ein (Suche nach Name oder Nummer, z. B. 123/131).</span></div>`;
+  $('#scan-results').querySelectorAll('img').forEach(img=>img.addEventListener('error',function(){if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=''}}));
+}
+$('#scan-results').addEventListener('change',e=>{const s=e.target.closest('select');if(!s)return;const el=s.closest('.sr'),i=+el.dataset.i;
+  const r=SCAN.results[i],ci=+s.value,chk=el.querySelector('input').checked;r.cand=[ci,...r.cand.filter(x=>x!==ci)];
+  renderScan();const n=$(`.sr[data-i="${i}"]`);n.querySelector('input').checked=true;n.querySelector('select').value=ci});
+$('#scan-results').addEventListener('click',e=>{if(!e.target.closest('#scan-add'))return;
+  let added=0;const newly=[];
+  document.querySelectorAll('#scan-results .sr').forEach(el=>{const cb=el.querySelector('input');if(!cb.checked)return;
+    const c=D.cards[SCAN.results[+el.dataset.i].cand[0]],id=cid(c),before=c[0]>0&&owned(c[0]);
+    ST.c[id]=Math.min(99,(ST.c[id]||0)+1);added++;if(c[0]>0&&!before)newly.push(c[1])});
+  save();SCAN.results=[];$('#scan-results').innerHTML='';
+  scanStatus(`${added} Karte${added===1?'':'n'} hinzugefügt.`+(newly.length?` Neu in der Sammlung: ${newly.join(', ')}.`:''));
+  alertMsg(`${added} Karte${added===1?'':'n'} hinzugefügt.`)});
 
 // ---------- Backup ----------
 $('#btn-export').addEventListener('click',()=>{
