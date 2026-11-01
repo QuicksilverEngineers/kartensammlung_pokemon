@@ -43,7 +43,7 @@ function route(){
 // ---------- Übersicht ----------
 function renderStats(){
   const pk=D.cards.filter(c=>c[0]>0), tr=D.cards.filter(c=>c[0]===0);
-  const pOwn=D.pokemon.filter(p=>ST.p[p[0]]).length;
+  const pOwn=D.pokemon.filter(p=>owned(p[0])).length;
   const kOwn=pk.filter(c=>cnt(c)>0).length, tOwn=tr.filter(c=>cnt(c)>0).length;
   const total=Object.values(ST.c).reduce((a,b)=>a+b,0);
   const box=(lbl,a,b)=>`<div class="stat"><div class="lbl">${lbl}</div><div class="val">${a.toLocaleString('de-DE')} <span class="muted" style="font-size:15px">von ${b.toLocaleString('de-DE')}</span></div><div class="bar"><i style="width:${b?(a/b*100).toFixed(1):0}%"></i></div></div>`;
@@ -57,22 +57,26 @@ function renderLegend(){
 }
 
 // ---------- Sammlung ----------
-const cardsPerDex={};
+const cardsPerDex={}, cardsByDex={};
+// Pokémon gilt als vorhanden, wenn eine seiner Karten eingetragen ist oder es manuell auf Ja steht.
+// ST.p enthält nur die manuelle Auswahl – so fällt der Status zurück, wenn alle Karten wieder auf 0 stehen.
+const hasCards=d=>(cardsByDex[d]||[]).some(c=>cnt(c)>0);
+const owned=d=>!!ST.p[d]||hasCards(d);
 function renderSammlung(){
   const q=$('#s-q').value.trim().toLowerCase(), st=$('#s-status').value;
   const rows=D.pokemon.filter(p=>{
     if(q&&!(p[1].toLowerCase().includes(q)||String(p[0])===q.replace(/^#?0*/,'')))return false;
-    if(st==='ja'&&!ST.p[p[0]])return false; if(st==='nein'&&ST.p[p[0]])return false; return true});
+    if(st==='ja'&&!owned(p[0]))return false; if(st==='nein'&&owned(p[0]))return false; return true});
   $('#s-count').textContent=rows.length.toLocaleString('de-DE')+' Pokémon';
-  $('#s-table tbody').innerHTML=rows.map(p=>{const d=p[0],on=!!ST.p[d],n=cardsPerDex[d]||0;
+  $('#s-table tbody').innerHTML=rows.map(p=>{const d=p[0],on=owned(d),byCard=hasCards(d),n=cardsPerDex[d]||0;
     return `<tr><td>${String(d).padStart(4,'0')}</td><td><img loading="lazy" alt="" src="${sprite(d)}"></td><td class="name">${esc(p[1])}</td>
-    <td><span class="yn" data-dex="${d}"><button class="${on?'on-ja':''}" data-v="1">Ja</button><button class="${on?'':'on-nein'}" data-v="0">Nein</button></span></td>
+    <td><span class="yn" data-dex="${d}"><button class="${on?'on-ja':''}" data-v="1">Ja</button><button class="${on?'':'on-nein'}" data-v="0">Nein</button></span>${byCard?'<div class="muted" style="font-size:11px">durch Karte</div>':''}</td>
     <td><a href="#karten?dex=${d}">${n} Karte${n===1?'':'n'}</a></td><td><a class="cm" target="_blank" rel="noopener" href="${cmSearch(p[1])}">Cardmarket</a></td></tr>`}).join('');
 }
 $('#s-table').addEventListener('click',e=>{const b=e.target.closest('.yn button');if(!b)return;const d=b.parentNode.dataset.dex;
-  if(b.dataset.v==='0'&&D.cards.some(c=>c[0]===+d&&cnt(c)>0)){alertMsg('Für dieses Pokémon sind Karten eingetragen – es bleibt vorhanden.');return}
   if(b.dataset.v==='1')ST.p[d]=1;else delete ST.p[d];save();
-  b.parentNode.children[0].className=b.dataset.v==='1'?'on-ja':'';b.parentNode.children[1].className=b.dataset.v==='1'?'':'on-nein'});
+  if(b.dataset.v==='0'&&hasCards(d))alertMsg('Für dieses Pokémon sind Karten eingetragen – es bleibt vorhanden. Setze die Karten auf 0, um es zu entfernen.');
+  const on=owned(d);b.parentNode.children[0].className=on?'on-ja':'';b.parentNode.children[1].className=on?'':'on-nein'});
 
 // ---------- Karten / Trainer ----------
 let KV={mode:'karten',page:1,dex:null,list:[]};
@@ -129,11 +133,13 @@ $('#k-grid').addEventListener('click',e=>{
   if(g){e.preventDefault();location.hash='#sammlung';setTimeout(()=>{$('#s-q').value=String(g.dataset.goto);renderSammlung()},0);return}
   const b=e.target.closest('.cnt button');if(!b)return;
   const card=b.closest('.kc'),id=card.dataset.id,n=Math.max(0,Math.min(99,(ST.c[id]||0)+ +b.dataset.d));
+  const dex=+card.dataset.dex, before=dex>0&&owned(dex);
   if(n)ST.c[id]=n;else delete ST.c[id];
-  // Karte hinzugefügt -> zugehöriges Pokémon in der Sammlung als vorhanden markieren
-  const dex=+card.dataset.dex;
-  if(n>0&&dex>0&&!ST.p[dex]){ST.p[dex]=1;alertMsg(card.querySelector('.kname a,.kname span').textContent+' ist jetzt in der Sammlung als vorhanden markiert.')}
   save();
+  // Sammlung folgt den Karten: erste Karte -> vorhanden, letzte Karte auf 0 -> wieder fehlend (außer manuell Ja)
+  if(dex>0){const after=owned(dex),name=card.querySelector('.kname a,.kname span').textContent;
+    if(!before&&after)alertMsg(name+' ist jetzt in der Sammlung als vorhanden markiert.');
+    if(before&&!after)alertMsg(name+' ist in der Sammlung wieder als fehlend markiert.')}
   b.parentNode.querySelector('span').textContent=n;card.classList.toggle('owned',n>0);
 });
 ['#k-set','#k-rar','#k-type','#k-status'].forEach(s=>$(s).addEventListener('change',()=>{KV.page=1;filterCards()}));
@@ -143,7 +149,7 @@ $('#s-status').addEventListener('change',renderSammlung);
 
 // ---------- Fehlend ----------
 function renderFehlend(){
-  const m=D.pokemon.filter(p=>!ST.p[p[0]]);
+  const m=D.pokemon.filter(p=>!owned(p[0]));
   $('#f-count').textContent=`Noch fehlend: ${m.length.toLocaleString('de-DE')} von ${D.pokemon.length.toLocaleString('de-DE')}`;
   $('#f-list').innerHTML=m.map(p=>`<div><span>${String(p[0]).padStart(4,'0')}</span>${esc(p[1])}</div>`).join('')||'<p>Alle Pokémon vorhanden – Glückwunsch!</p>';
 }
@@ -153,18 +159,15 @@ $('#btn-export').addEventListener('click',()=>{
   const blob=new Blob([JSON.stringify({app:'pkmn-sammlung',version:1,datum:new Date().toISOString(),...ST},null,1)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pokemon-sammlung-sicherung.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 $('#file-import').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{
-  try{const j=JSON.parse(t);if(!j.p||!j.c)throw 0;ST={p:j.p,c:j.c};syncOwned();save();renderStats();alertMsg('Sicherung geladen.')}catch(x){alertMsg('Die Datei ist keine gültige Sicherung.')}});e.target.value=''});
+  try{const j=JSON.parse(t);if(!j.p||!j.c)throw 0;ST={p:j.p,c:j.c};save();renderStats();alertMsg('Sicherung geladen.')}catch(x){alertMsg('Die Datei ist keine gültige Sicherung.')}});e.target.value=''});
 $('#btn-reset').addEventListener('click',()=>{if(confirm('Wirklich alle Einträge in diesem Browser löschen?')){ST={p:{},c:{}};save();renderStats()}});
 function alertMsg(t){const d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#17365D;color:#fff;padding:10px 16px;border-radius:8px;z-index:99';document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
-
-// Pokémon mit eingetragenen Karten immer als vorhanden markieren
-function syncOwned(){let ch=false;D.cards.forEach(c=>{if(c[0]&&cnt(c)>0&&!ST.p[c[0]]){ST.p[c[0]]=1;ch=true}});if(ch)save()}
 
 // ---------- init ----------
 load();
 fetch('data/data.json').then(r=>r.json()).then(j=>{
   D=j;$('#loading').remove();$('#stand').textContent=D.stand;
-  D.cards.forEach(c=>{if(c[0])cardsPerDex[c[0]]=(cardsPerDex[c[0]]||0)+1});
+  D.cards.forEach(c=>{if(c[0]){cardsPerDex[c[0]]=(cardsPerDex[c[0]]||0)+1;(cardsByDex[c[0]]=cardsByDex[c[0]]||[]).push(c)}});
   // set filter (newest first)
   const used=new Set(D.cards.map(c=>c[2]));
   $('#k-set').innerHTML+=D.sets.map((s,i)=>used.has(i)?`<option value="${i}">${esc(s[1])} (${s[2].slice(0,4)})</option>`:'').reverse().join('');
@@ -173,7 +176,7 @@ fetch('data/data.json').then(r=>r.json()).then(j=>{
   $('#k-rar').innerHTML+=Object.entries(byName).map(([k,v])=>`<option value="${v.join(',')}">${esc(k)}</option>`).join('');
   const types=[...new Set(D.cards.filter(c=>c[9]).map(c=>c[9]))].sort();
   $('#k-type').innerHTML+=types.map(t=>`<option>${esc(t)}</option>`).join('');
-  syncOwned();renderLegend();route();
+  renderLegend();route();
   window.addEventListener('hashchange',route);
 }).catch(()=>{$('#loading').textContent='Die Daten konnten nicht geladen werden. Bitte die Seite über einen Webserver (z. B. Vercel) öffnen, nicht als lokale Datei.'});
 })();
