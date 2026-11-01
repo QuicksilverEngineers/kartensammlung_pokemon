@@ -29,7 +29,7 @@ const rarHtml=i=>{const r=D.rarities[i];return `<span class="sym" style="color:$
 // ---------- routing ----------
 function route(){
   const h=(location.hash||'#uebersicht').slice(1); const [tab,qs]=h.split('?');
-  const t=['uebersicht','sammlung','karten','trainer','fehlend'].includes(tab)?tab:'uebersicht';
+  const t=['uebersicht','sammlung','karten','trainer','fehlend','scan'].includes(tab)?tab:'uebersicht';
   document.querySelectorAll('#tabs a').forEach(a=>a.classList.toggle('active',a.dataset.tab===t));
   document.querySelectorAll('.view').forEach(v=>v.hidden=true);
   const params=new URLSearchParams(qs||'');
@@ -37,6 +37,7 @@ function route(){
   if(t==='sammlung'){$('#view-sammlung').hidden=false;renderSammlung()}
   if(t==='karten'||t==='trainer'){$('#view-karten').hidden=false;openCards(t,params)}
   if(t==='fehlend'){$('#view-fehlend').hidden=false;renderFehlend()}
+  if(t==='scan'){$('#view-scan').hidden=false}
   window.scrollTo(0,0);
 }
 
@@ -153,6 +154,86 @@ function renderFehlend(){
   $('#f-count').textContent=`Noch fehlend: ${m.length.toLocaleString('de-DE')} von ${D.pokemon.length.toLocaleString('de-DE')}`;
   $('#f-list').innerHTML=m.map(p=>`<div><span>${String(p[0]).padStart(4,'0')}</span>${esc(p[1])}</div>`).join('')||'<p>Alle Pokémon vorhanden – Glückwunsch!</p>';
 }
+
+// ---------- Karten scannen ----------
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
+function parseNr(s){
+  s=String(s||'').toUpperCase();
+  let m=s.match(/([A-Z]*)\s*0*(\d+)\s*[A-Z]?\s*\/\s*([A-Z]*)\s*0*(\d+)/);
+  if(m)return {pre:m[1],num:+m[2],total:+m[4]};
+  m=s.match(/([A-Z]*)\s*0*(\d+)/);
+  return m?{pre:m[1],num:+m[2],total:null}:null;
+}
+let cardNrCache=null;
+function matchCard(k){
+  if(!cardNrCache)cardNrCache=D.cards.map(c=>parseNr(c[4]));
+  const n=parseNr(k.nummer),nm=norm(k.name),typ=(k.typ||'').toLowerCase();
+  const res=[];
+  D.cards.forEach((c,i)=>{
+    const cn=cardNrCache[i];let sc=0;const cnm=norm(c[1]);
+    const nameEq=nm&&cnm===nm, nameIn=nm&&nm.length>3&&(cnm.includes(nm)||nm.includes(cnm));
+    if(n&&cn&&cn.num===n.num&&(!n.pre||!cn.pre||n.pre===cn.pre)){
+      sc+=4; if(n.total&&cn.total===n.total)sc+=3;
+      if(nameEq)sc+=5;else if(nameIn)sc+=2;
+    }else if(nameEq&&!n){sc+=2}
+    if(sc<6&&!(sc>=2&&!n))return;
+    if(typ==='trainer'&&c[0]!==0)sc-=2; if(typ==='pokemon'&&c[0]===0)sc-=2;
+    res.push([sc,i]);
+  });
+  res.sort((a,b)=>b[0]-a[0]||D.sets[D.cards[b[1]][2]][2].localeCompare(D.sets[D.cards[a[1]][2]][2]));
+  return res.slice(0,8);
+}
+let SCAN={file:null,results:[]};
+try{$('#scan-pw').value=localStorage.getItem('pkmn-scan-pw')||''}catch(e){}
+const scanReady=()=>{$('#scan-go').disabled=!(SCAN.file&&$('#scan-pw').value)};
+$('#scan-pw').addEventListener('input',scanReady);
+$('#scan-file').addEventListener('change',e=>{SCAN.file=e.target.files[0]||null;
+  $('#scan-preview').innerHTML=SCAN.file?`<img alt="Vorschau" src="${URL.createObjectURL(SCAN.file)}">`:'';$('#scan-results').innerHTML='';$('#scan-status').textContent='';scanReady()});
+function shrink(file,max=1800){return new Promise((ok,err)=>{const img=new Image();img.onload=()=>{
+  const f=Math.min(1,max/Math.max(img.width,img.height)),cv=document.createElement('canvas');
+  cv.width=Math.round(img.width*f);cv.height=Math.round(img.height*f);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+  ok(cv.toDataURL('image/jpeg',0.85).split(',')[1])};img.onerror=()=>err(new Error('Bild konnte nicht gelesen werden.'));img.src=URL.createObjectURL(file)})}
+$('#scan-go').addEventListener('click',async()=>{
+  const pw=$('#scan-pw').value;try{localStorage.setItem('pkmn-scan-pw',pw)}catch(e){}
+  $('#scan-go').disabled=true;$('#scan-status').textContent='Karten werden erkannt … (kann 10–30 Sekunden dauern)';$('#scan-results').innerHTML='';
+  try{
+    const bild=await shrink(SCAN.file);
+    const r=await fetch('/api/scan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({bild,mediaType:'image/jpeg',passwort:pw})});
+    const j=await r.json().catch(()=>({fehler:'Ungültige Antwort vom Server ('+r.status+').'}));
+    if(!r.ok)throw new Error(j.fehler||('Fehler '+r.status));
+    SCAN.results=j.karten.filter(k=>(k.typ||'')!=='energie').map(k=>({k,cand:matchCard(k)}));
+    const skipped=j.karten.length-SCAN.results.length;
+    $('#scan-status').textContent=`${j.karten.length} Karte${j.karten.length===1?'':'n'} erkannt${skipped?`, davon ${skipped} Energie (nicht in der Liste)`:''}. Bitte prüfen und dann hinzufügen.`;
+    renderScan();
+  }catch(e){$('#scan-status').textContent=e.message}
+  scanReady();
+});
+function renderScan(){
+  if(!SCAN.results.length){$('#scan-results').innerHTML='';return}
+  $('#scan-results').innerHTML=SCAN.results.map((r,i)=>{
+    const best=r.cand[0],c=best?D.cards[best[1]]:null,u=c?imgUrls(c):[];
+    const opts=r.cand.map(([sc,ci],x)=>{const cc=D.cards[ci];return `<option value="${ci}">${esc(cc[1])} · ${esc(D.sets[cc[2]][1])} · ${esc(cc[4])}${cc[0]?'':' (Trainer)'}</option>`}).join('');
+    return `<div class="sr${c?'':' none'}" data-i="${i}">
+      <input type="checkbox" ${c&&r.k.sicher!==false&&best[0]>=9?'checked':''} ${c?'':'disabled'} aria-label="Hinzufügen">
+      ${u.length?`<img loading="lazy" alt="" src="${u[0]}" data-alt="${u[1]||''}">`:'<div class="ph"></div>'}
+      <div><div><b>${c?esc(c[1]):'Keine passende Karte gefunden'}</b>${c?` <span class="muted">(${cnt(c)}× vorhanden)</span>`:''}</div>
+        <div class="det">Erkannt: ${esc(r.k.name||'?')} · ${esc(r.k.nummer||'?')}${r.k.setcode?' · '+esc(r.k.setcode):''}${r.k.sicher===false?' · unsicher':''}</div>
+        ${r.cand.length>1?`<select>${opts}</select>`:''}
+        ${c?'':`<a class="cm" target="_blank" rel="noopener" href="${cmSearch((r.k.name||'')+' '+(r.k.nummer||''))}">Auf Cardmarket suchen</a>`}
+      </div></div>`}).join('')+`<div class="scan-actions"><button class="btn" id="scan-add">Ausgewählte hinzufügen (+1)</button><span class="muted">Nicht angehakt = wird nicht hinzugefügt.</span></div>`;
+  $('#scan-results').querySelectorAll('img').forEach(img=>img.addEventListener('error',function(){if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=''}}));
+}
+$('#scan-results').addEventListener('change',e=>{const s=e.target.closest('select');if(!s)return;const i=+s.closest('.sr').dataset.i;
+  const r=SCAN.results[i],ci=+s.value;r.cand=[r.cand.find(x=>x[1]===ci),...r.cand.filter(x=>x[1]!==ci)];
+  const chk=s.closest('.sr').querySelector('input').checked;renderScan();$(`.sr[data-i="${i}"] input`).checked=chk;$(`.sr[data-i="${i}"] select`).value=ci});
+$('#scan-results').addEventListener('click',e=>{if(!e.target.closest('#scan-add'))return;
+  let added=0;const newly=[];
+  document.querySelectorAll('#scan-results .sr').forEach(el=>{const cb=el.querySelector('input');if(!cb.checked)return;
+    const c=D.cards[SCAN.results[+el.dataset.i].cand[0][1]],id=cid(c),before=c[0]>0&&owned(c[0]);
+    ST.c[id]=Math.min(99,(ST.c[id]||0)+1);added++;if(c[0]>0&&!before)newly.push(c[1])});
+  save();SCAN.results=[];$('#scan-results').innerHTML='';
+  $('#scan-status').textContent=`${added} Karte${added===1?'':'n'} hinzugefügt.`+(newly.length?` Neu in der Sammlung: ${newly.join(', ')}.`:'');
+  alertMsg(`${added} Karte${added===1?'':'n'} hinzugefügt.`)});
 
 // ---------- Backup ----------
 $('#btn-export').addEventListener('click',()=>{
