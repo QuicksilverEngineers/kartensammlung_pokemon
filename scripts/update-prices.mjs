@@ -44,6 +44,7 @@ const fromGuide = id => {
 // ---- 2) Karten ohne Produkt-ID über die Produktliste zuordnen ----
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/\[[^\]]*\]/g, '') // Cardmarket hängt Attacken in [eckigen Klammern] an
+  .replace(/\blv\.?\s*(\d+|x)\b/g, '') // „Lv.10“ / „LV.X“ in alten Produktnamen
   .replace(/\((v\.?\s*\d+|[^)]*version[^)]*)\)/g, '').replace(/[^a-z0-9]/g, '');
 const setExp = {}; // Erweiterungs-IDs je Set: aus Set-Daten + aus Karten des Sets mit bekannter Produkt-ID
 for (const [sid, info] of Object.entries(match.sets)) setExp[sid] = new Set(info.exp);
