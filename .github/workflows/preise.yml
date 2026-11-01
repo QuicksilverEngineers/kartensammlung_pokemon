@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/preise.yml
       - scripts/update-prices.mjs
+      - scripts/cm-match.json
 
 permissions:
   contents: write
