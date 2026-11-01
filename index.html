@@ -82,15 +82,19 @@
   <section id="view-scan" class="view" hidden>
     <div class="panel">
       <h2>Karten per Foto hinzufügen</h2>
-      <p class="muted">Foto von einer oder mehreren Karten aufnehmen (z.&nbsp;B. eine Seite im Sammelordner). Die Karten werden erkannt, du prüfst die Vorschläge und fügst sie mit einem Klick hinzu.</p>
+      <p class="muted">Kostenlos: Die Texterkennung läuft direkt in deinem Browser, das Foto wird nirgendwohin hochgeladen. Erkannt werden Kartenname und Kartennummer – du prüfst die Vorschläge und fügst sie mit einem Klick hinzu.</p>
+      <div class="seg" id="scan-mode" role="group" aria-label="Was ist auf dem Foto?">
+        <button data-m="one">1 Karte</button><button data-m="nine">Ordnerseite (bis 9 Karten)</button>
+      </div>
       <div class="scan-form">
         <label class="btn" for="scan-file">Foto aufnehmen / auswählen</label>
         <input id="scan-file" type="file" accept="image/*" capture="environment" hidden>
-        <input id="scan-pw" type="password" placeholder="Scan-Passwort" autocomplete="current-password">
+        <span id="scan-rot" class="seg small" hidden><button data-r="-90" title="Nach links drehen">↺ drehen</button><button data-r="90" title="Nach rechts drehen">↻ drehen</button></span>
         <button id="scan-go" class="btn" disabled>Karten erkennen</button>
       </div>
       <div id="scan-preview" class="scan-preview"></div>
       <div id="scan-status" class="muted"></div>
+      <p class="muted" style="font-size:12.5px">Tipps: gerade von oben fotografieren, ohne Blitz-Spiegelung auf den Hüllen. Bei „1 Karte“ die Karte möglichst bildfüllend aufnehmen.</p>
     </div>
     <div id="scan-results"></div>
   </section>
@@ -111,6 +115,7 @@
   Pokémon und alle zugehörigen Namen sind Marken von Nintendo, Creatures und GAME FREAK. Private Sammlerübersicht ohne kommerziellen Zweck.
 </footer>
 
+<script src="scan-match.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

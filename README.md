@@ -12,14 +12,8 @@ Statische Website – kein Build-Schritt nötig.
 - Kartenbilder kommen von assets.tcgdex.net, Pokémon-Bilder von den PokéAPI-Sprites auf GitHub.
 - Lokal testen: `npx serve .` (index.html nicht direkt als Datei öffnen, sonst lädt data.json nicht).
 
+
 ## Karten per Foto scannen (Tab „Karten scannen“)
-Die Erkennung läuft über die Vercel-Funktion `api/scan.js`, die das Foto an Claude (Anthropic API) schickt.
-Einrichtung in Vercel → Project → Settings → Environment Variables:
-
-| Variable | Wert |
-|---|---|
-| `ANTHROPIC_API_KEY` | API-Schlüssel von console.anthropic.com (kostenpflichtig, wenige Cent pro Foto) |
-| `SCAN_PASSWORD` | frei gewähltes Passwort – schützt davor, dass Fremde über deine Seite API-Kosten verursachen |
-| `ANTHROPIC_MODEL` | optional, Standard `claude-sonnet-5-5` |
-
-Danach neu deployen. Auf der Seite das Passwort einmal eingeben (wird im Browser gemerkt), Foto wählen, „Karten erkennen“, Vorschläge prüfen, „Ausgewählte hinzufügen“.
+Kostenlos und ohne Server: Die Texterkennung (Tesseract.js) läuft im Browser, das Foto verlässt das Gerät nicht.
+Beim ersten Scan werden einmalig ca. 10 MB Erkennungsdaten von cdn.jsdelivr.net geladen.
+Modus „1 Karte“ für Einzelkarten, „Ordnerseite“ für bis zu 9 Karten. Die Zuordnung (`scan-match.js`) nutzt Kartenname und Kartennummer.
