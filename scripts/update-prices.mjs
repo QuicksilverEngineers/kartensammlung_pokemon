@@ -43,6 +43,7 @@ const fromGuide = id => {
 
 // ---- 2) Karten ohne Produkt-ID über die Produktliste zuordnen ----
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/\[[^\]]*\]/g, '') // Cardmarket hängt Attacken in [eckigen Klammern] an
   .replace(/\((v\.?\s*\d+|[^)]*version[^)]*)\)/g, '').replace(/[^a-z0-9]/g, '');
 const setExp = {}; // Erweiterungs-IDs je Set: aus Set-Daten + aus Karten des Sets mit bekannter Produkt-ID
 for (const [sid, info] of Object.entries(match.sets)) setExp[sid] = new Set(info.exp);
@@ -83,7 +84,7 @@ for (const [g, locals] of groups) {
 let shown = 0;
 for (const [g, locals] of groups) {
   const [sid, n] = g.split('|');
-  if (locals.some(l => matchedId[sid + '/' + l]) || shown >= 25) continue;
+  if (locals.some(l => matchedId[sid + '/' + l]) || shown >= 12) continue;
   const exps = [...(setExp[sid] || [])];
   const sim = prodList.filter(p => exps.includes(p.idExpansion) && norm(p.name).startsWith(n.slice(0, 4))).slice(0, 4).map(p => p.name + ' #' + p.idProduct);
   console.log(`  offen: ${sid} ${locals.join(',')} „${n}“ Erw. ${exps.join('/') || '–'} → ${sim.join(' | ') || 'kein ähnliches Produkt'}`);
