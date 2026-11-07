@@ -39,4 +39,9 @@ jobs:
           git add data/data.json data/prices.json scripts/cm-match.json
           if git diff --cached --quiet; then echo "Keine Änderungen."; exit 0; fi
           git commit -m "Kartendaten und Preise aktualisiert"
-          git push
+          # Falls inzwischen ein anderer Lauf etwas committet hat: darauf aufsetzen, eigene Daten gewinnen
+          for i in 1 2 3; do
+            git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep 5
+          done
+          exit 1
