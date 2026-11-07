@@ -1,0 +1,42 @@
+name: Kartendaten aktualisieren
+
+# Holt die neueste tcgdex-Kartendatenbank, übernimmt neue deutsche Karten und Erweiterungen
+# (inkl. Bilder und Cardmarket-Links) und aktualisiert danach die Cardmarket-Preise.
+# Starten: GitHub → Actions → „Kartendaten aktualisieren“ → Run workflow.
+# Läuft außerdem einmal, wenn das Skript oder diese Datei geändert wird.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/karten.yml
+      - scripts/update-cards.mjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daten
+  cancel-in-progress: false
+
+jobs:
+  karten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Kartendatenbank (tcgdex) herunterladen
+        run: git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/cards-database"
+      - name: Kartenliste neu bauen
+        run: node scripts/update-cards.mjs "$RUNNER_TEMP/cards-database/data"
+      - name: Cardmarket-Preise aktualisieren
+        run: node scripts/update-prices.mjs
+      - name: Änderungen committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/data.json data/prices.json scripts/cm-match.json
+          if git diff --cached --quiet; then echo "Keine Änderungen."; exit 0; fi
+          git commit -m "Kartendaten und Preise aktualisiert"
+          git push

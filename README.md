@@ -17,3 +17,9 @@ Statische Website – kein Build-Schritt nötig.
 Kostenlos und ohne Server: Die Texterkennung (Tesseract.js) läuft im Browser, das Foto verlässt das Gerät nicht.
 Beim ersten Scan werden einmalig ca. 10 MB Erkennungsdaten von cdn.jsdelivr.net geladen.
 Modus „1 Karte“ für Einzelkarten, „Ordnerseite“ für bis zu 9 Karten. Die Zuordnung (`scan-match.js`) nutzt Kartenname und Kartennummer.
+
+## Neue Karten und Erweiterungen übernehmen
+GitHub → **Actions** → **„Kartendaten aktualisieren“** → **Run workflow**.
+Die Action lädt die neueste [tcgdex-Kartendatenbank](https://github.com/tcgdex/cards-database), übernimmt alle Pokémon- und Trainerkarten mit deutschem Namen (inkl. Bilder und Cardmarket-Links), aktualisiert die Preise und committet das Ergebnis; Vercel veröffentlicht danach automatisch. Die Zusammenfassung des Laufs zeigt neue Erweiterungen und Karten.
+Gespeicherte Sammlungen bleiben erhalten (Karten werden über „Set-ID/Kartennummer“ zugeordnet).
+Hinweis: Neue Sets erscheinen in tcgdex meist einige Tage nach dem Verkaufsstart.
