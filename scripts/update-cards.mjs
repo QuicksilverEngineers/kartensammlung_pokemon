@@ -57,6 +57,33 @@ for (const serie of await readdir(ROOT)) {
   }
 }
 
+// ---------- Fehlende Pokédex-Nummern aus dem deutschen Namen ableiten ----------
+// Neue Sets kommen in tcgdex oft zunächst ohne dexId. Die Nummer wird dann über die
+// Pokémon-Liste der Sammlung (deutsche Namen) aus dem Kartennamen bestimmt,
+// z. B. „Mega-Rayquaza-ex“ → Rayquaza (#384), „Alola-Raichu“ → Raichu, „Erikas Bisasam“ → Bisasam.
+const normName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9♀♂]/g, '');
+const dexByName = new Map(old.pokemon.map(p => [normName(p[1]), p[0]]));
+const dexNames = [...dexByName.keys()].sort((a, b) => b.length - a.length);
+function guessDex(name) {
+  const base = String(name || '')
+    .replace(/[‑–]/g, '-')
+    .replace(/^(Mega|Ur|Crypto|Dunkles|Dunkler|Dunkle|Strahlendes|Strahlender|Strahlende|Leuchtendes|Leuchtender|Leuchtende)[- ]/i, '')
+    .replace(/^(Alola|Galar|Hisui|Paldea)[- ]/i, '')
+    .replace(/[- ]?(ex|EX|GX|V|VMAX|VSTAR|V-UNION|BREAK|LV\.X|☆|δ|Prime|LEGENDE|[XY])$/g, '').trim();
+  const n = normName(base);
+  if (dexByName.has(n)) return dexByName.get(n);
+  const hit = dexNames.find(d => d.length >= 3 && normName(name).includes(d));
+  return hit ? dexByName.get(hit) : null;
+}
+let guessed = 0; const unresolved = [];
+cards.forEach(c => {
+  if (c.category !== 'Pokemon' || (c.dexId && c.dexId.length) || !c.name.de) return;
+  if (sets[c.set].serie === 'Pokémon TCG Pocket') return;
+  const d = guessDex(c.name.de);
+  if (d) { c.dexId = [d]; guessed++; } else unresolved.push(`${c.set}/${c.local} ${c.name.de}`);
+});
+console.log(`Pokédex-Nummer aus dem Namen bestimmt: ${guessed}${unresolved.length ? `; nicht zuordenbar (${unresolved.length}): ${unresolved.slice(0, 15).join(', ')}` : ''}`);
+
 // ---------- Filtern und umwandeln ----------
 const keep = cards.filter(c => (c.category === 'Pokemon' || c.category === 'Trainer') && sets[c.set].serie !== 'Pokémon TCG Pocket' && c.name.de
   && (c.category !== 'Pokemon' || (c.dexId && c.dexId.length)));
